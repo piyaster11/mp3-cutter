@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MP3 Cutter – MP4 to MP3</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--fg:#e8eaf0;--mut:#8b91a1;--acc:#4f8cff;--sel:rgba(79,140,255,.25)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,sans-serif;padding:env(safe-area-inset-top) 12px 24px}
+.wrap{max-width:820px;margin:0 auto}h1{font-size:1.4rem;margin:18px 0 4px}p.sub{color:var(--mut);margin:0 0 16px}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px}
+#drop{border:2px dashed #333a48;border-radius:12px;padding:28px 12px;text-align:center;cursor:pointer;color:var(--mut)}
+#drop.over{border-color:var(--acc);color:var(--fg)}
+#wave{position:relative;height:140px;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{width:100%;height:100%;display:block;border-radius:8px;background:#11141a}
+#region{position:absolute;top:0;bottom:0;background:var(--sel);border-left:2px solid var(--acc);border-right:2px solid var(--acc)}
+.h{position:absolute;top:0;bottom:0;width:28px;margin-left:-14px}.h::after{content:"";position:absolute;left:9px;top:50%;width:10px;height:36px;margin-top:-18px;background:var(--acc);border-radius:4px}
+#hs{left:0}#he{left:100%}
+#ph{position:absolute;top:0;bottom:0;width:2px;background:#fff;display:none;pointer-events:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:12px}
+label{font-size:.8rem;color:var(--mut);display:flex;flex-direction:column;gap:4px}
+input[type=text]{background:#11141a;border:1px solid #2a2f3b;color:var(--fg);border-radius:8px;padding:10px;width:110px;font-size:16px}
+button,.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+button.sec{background:#2a2f3b}button:disabled{opacity:.4}
+#info,#status{color:var(--mut);font-size:.9rem;margin-top:8px}.hide{display:none}
+</style></head><body><div class="wrap">
+<h1>🎵 MP3 Cutter</h1><p class="sub">Convert MP4 (or any video/audio) to MP3 and trim it. Runs entirely in your browser — nothing is uploaded.</p>
+<div class="card"><div id="drop">Drop a file here or <b>tap to choose</b><input id="file" type="file" accept="video/*,audio/*,.mp4,.mov,.m4a,.mp3,.wav" hidden></div><div id="info"></div></div>
+<div class="card hide" id="editor">
+<div id="wave"><canvas id="cv"></canvas><div id="region"><div class="h" id="hs"></div><div class="h" id="he"></div></div><div id="ph"></div></div>
+<div class="row">
+<label>Start<input id="tStart" type="text" inputmode="decimal"></label>
+<label>End<input id="tEnd" type="text" inputmode="decimal"></label>
+<label>Length<input id="tLen" type="text" readonly></label>
+<button class="sec" id="play">▶ Preview</button></div>
+<div class="row"><button id="conv">Convert to MP3</button><a class="btn hide" id="dl">⬇ Download</a></div>
+<div id="status"></div></div>
+<p class="sub" style="font-size:.8rem">MP3 encoding by lamejs · 192 kbps</p>
+</div>
+<script src="lame.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let ctx,buf,name="audio",sel={s:0,e:20},src=null,raf=0,playStart=0;
+const fmt=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(2)};
+const parse=v=>{v=String(v).trim();if(v.includes(":")){const[p,q]=v.split(":");return(+p)*60+(+q)}return +v};
+const drop=$("drop"),fi=$("file");
+drop.onclick=()=>fi.click();fi.onchange=()=>fi.files[0]&&load(fi.files[0]);
+["dragover","dragenter"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",ev=>ev.dataTransfer.files[0]&&load(ev.dataTransfer.files[0]));
+async function load(f){
+ stop();name=f.name.replace(/\.[^.]+$/,"")||"audio";$("info").textContent="Decoding "+f.name+"…";$("dl").classList.add("hide");
+ try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();const ab=await f.arrayBuffer();
+  buf=await new Promise((r,j)=>{const p=ctx.decodeAudioData(ab,r,j);if(p&&p.then)p.then(r,j)});}
+ catch(e){$("info").textContent="Could not decode audio from this file: "+e;return}
+ $("info").textContent=f.name+" · "+fmt(buf.duration)+" · "+buf.sampleRate+" Hz · "+buf.numberOfChannels+" ch";
+ sel={s:0,e:Math.min(20,buf.duration)};$("editor").classList.remove("hide");draw();upd();$("status").textContent="";
+}
+function draw(){const c=$("cv"),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;
+ const g=c.getContext("2d"),d=buf.getChannelData(0),W=c.width,H=c.height,step=Math.max(1,Math.floor(d.length/W));
+ g.fillStyle="#7aa7ff";for(let x=0;x<W;x++){let mn=1,mx=-1;const o=x*step;for(let i=0;i<step;i+=Math.ceil(step/200)){const v=d[o+i]||0;if(v<mn)mn=v;if(v>mx)mx=v}
+ g.fillRect(x,(1+mn)*H/2,1,Math.max(1,(mx-mn)*H/2))}}
+function upd(from){const D=buf.duration;sel.s=Math.max(0,Math.min(sel.s,D));sel.e=Math.max(0,Math.min(sel.e,D));if(sel.e-sel.s<.05){if(from==="s")sel.s=Math.max(0,sel.e-.05);else sel.e=Math.min(D,sel.s+.05)}
+ const R=$("region");R.style.left=(sel.s/D*100)+"%";R.style.width=((sel.e-sel.s)/D*100)+"%";
+ if(document.activeElement!==$("tStart"))$("tStart").value=fmt(sel.s);if(document.activeElement!==$("tEnd"))$("tEnd").value=fmt(sel.e);$("tLen").value=fmt(sel.e-sel.s)}
+["tStart","tEnd"].forEach(id=>{const el=$(id);const f=()=>{const v=parse(el.value);if(!isNaN(v)){sel[id==="tStart"?"s":"e"]=v;upd(id==="tStart"?"s":"e")}};el.addEventListener("change",f);el.addEventListener("blur",()=>{f();el.value=fmt(sel[id==="tStart"?"s":"e"])})});
+// dragging
+let drag=null;const W=$("wave");
+const tAt=ev=>{const r=W.getBoundingClientRect();return Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width))*buf.duration};
+W.addEventListener("pointerdown",ev=>{if(!buf)return;const t=tAt(ev),px=buf.duration/W.clientWidth*20;
+ if(ev.target.id==="hs"||Math.abs(t-sel.s)<px)drag={k:"s"};else if(ev.target.id==="he"||Math.abs(t-sel.e)<px)drag={k:"e"};
+ else if(t>sel.s&&t<sel.e)drag={k:"m",o:t-sel.s,l:sel.e-sel.s};else{sel.s=t;sel.e=t;drag={k:"e"}}
+ W.setPointerCapture(ev.pointerId);ev.preventDefault()});
+W.addEventListener("pointermove",ev=>{if(!drag)return;const t=tAt(ev);
+ if(drag.k==="m"){let s=Math.max(0,Math.min(t-drag.o,buf.duration-drag.l));sel.s=s;sel.e=s+drag.l}else if(drag.k==="s")sel.s=Math.min(t,sel.e);else sel.e=Math.max(t,sel.s);upd(drag.k)});
+W.addEventListener("pointerup",()=>{drag=null;if(sel.e-sel.s<.05){sel.e=Math.min(buf.duration,sel.s+.05)}upd()});
+addEventListener("resize",()=>buf&&draw());
+// preview
+function stop(){if(src){try{src.stop()}catch(e){}src=null}cancelAnimationFrame(raf);$("ph").style.display="none";$("play").textContent="▶ Preview"}
+$("play").onclick=()=>{if(src)return stop();ctx.resume();src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);
+ src.start(0,sel.s,sel.e-sel.s);playStart=ctx.currentTime;const s0=sel.s,len=sel.e-sel.s;src.onended=stop;$("play").textContent="■ Stop";$("ph").style.display="block";
+ const tick=()=>{const t=s0+Math.min(len,ctx.currentTime-playStart);$("ph").style.left=(t/buf.duration*100)+"%";raf=requestAnimationFrame(tick)};tick()};
+// encode
+$("conv").onclick=async()=>{stop();const b=$("conv");b.disabled=true;$("dl").classList.add("hide");
+ const sr=buf.sampleRate,ch=Math.min(2,buf.numberOfChannels),a=Math.floor(sel.s*sr),z=Math.floor(sel.e*sr);
+ const enc=new lamejs.Mp3Encoder(ch,sr,192),out=[],conv=d=>{const r=new Int16Array(d.length);for(let i=0;i<d.length;i++){const v=Math.max(-1,Math.min(1,d[i]));r[i]=v<0?v*32768:v*32767}return r};
+ const L=conv(buf.getChannelData(0).subarray(a,z)),R=ch>1?conv(buf.getChannelData(1).subarray(a,z)):null,N=L.length,blk=1152*20;
+ for(let i=0;i<N;i+=blk){const m=ch>1?enc.encodeBuffer(L.subarray(i,i+blk),R.subarray(i,i+blk)):enc.encodeBuffer(L.subarray(i,i+blk));if(m.length)out.push(new Uint8Array(m));
+  if((i/blk)%50===0){$("status").textContent="Encoding… "+Math.round(i/N*100)+"%";await new Promise(r=>setTimeout(r))}}
+ const f=enc.flush();if(f.length)out.push(new Uint8Array(f));
+ const blob=new Blob(out,{type:"audio/mpeg"}),dl=$("dl");if(dl.href)URL.revokeObjectURL(dl.href);dl.href=URL.createObjectURL(blob);dl.download=name+"_cut.mp3";dl.classList.remove("hide");
+ $("status").textContent="Done: "+fmt(sel.e-sel.s)+" · "+(blob.size/1024/1024).toFixed(2)+" MB";b.disabled=false};
+</script></body></html>
