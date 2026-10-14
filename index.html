@@ -38,7 +38,7 @@ button.sec{background:#2a2f3b}button:disabled{opacity:.4}
 <script src="lame.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-let ctx,buf,name="audio",sel={s:0,e:20},src=null,raf=0,playStart=0;
+let ctx,buf,name="audio",sel={s:0,e:14.59},src=null,raf=0,playStart=0;
 const fmt=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=t-m*60;return m+":"+(s<10?"0":"")+s.toFixed(2)};
 const parse=v=>{v=String(v).trim();if(v.includes(":")){const[p,q]=v.split(":");return(+p)*60+(+q)}return +v};
 const drop=$("drop"),fi=$("file");
@@ -52,7 +52,7 @@ async function load(f){
   buf=await new Promise((r,j)=>{const p=ctx.decodeAudioData(ab,r,j);if(p&&p.then)p.then(r,j)});}
  catch(e){$("info").textContent="Could not decode audio from this file: "+e;return}
  $("info").textContent=f.name+" · "+fmt(buf.duration)+" · "+buf.sampleRate+" Hz · "+buf.numberOfChannels+" ch";
- sel={s:0,e:Math.min(20,buf.duration)};$("editor").classList.remove("hide");draw();upd();$("status").textContent="";
+ sel={s:0,e:Math.min(14.59,buf.duration)};$("editor").classList.remove("hide");draw();upd();$("status").textContent="";
 }
 function draw(){const c=$("cv"),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;
  const g=c.getContext("2d"),d=buf.getChannelData(0),W=c.width,H=c.height,step=Math.max(1,Math.floor(d.length/W));
